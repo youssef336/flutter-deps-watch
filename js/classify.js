@@ -18,7 +18,6 @@ export function lockReasons(dep) {
     ...(dep.section === 'override' ? ['override'] : []),
     ...(dep.source !== 'hosted' ? ['non-hosted'] : []),
     ...(PINNED_NOTE.test(dep.note || '') ? ['pinned-note'] : []),
-    ...(Version.parse(dep.constraint) ? ['exact-pin'] : []),
   ];
 }
 
@@ -48,13 +47,16 @@ export function classify(f) {
     ...(current.isBreakingTo(latest) ? ['major-bump'] : []),
     ...(BREAKING_TEXT.test(changelog) ? ['changelog-breaking'] : []),
     ...(f.sdkCompatible === false ? ['needs-newer-sdk'] : []),
-    ...(constraint && !constraint.allows(latest) ? ['outside-constraint'] : []),
+    ...(constraint && !constraint.allows(latest) && !Version.parse(f.dep.constraint) ? ['outside-constraint'] : []),
   ];
   if (breaking.some((r) => r !== 'outside-constraint')) {
     return { category: 'breaking', reasons: breaking, locked: false, ota };
   }
 
+  // An exact pin is a style choice in many apps, not a "never touch": it is
+  // flagged and its upgrade command keeps the pin exact.
   const attention = [
+    ...(Version.parse(f.dep.constraint) ? ['exact-pin'] : []),
     ...(f.native === true ? ['native-plugin'] : []),
     ...(DEPRECATION_TEXT.test(changelog) ? ['changelog-deprecation'] : []),
     ...(PLATFORM_FLOOR_TEXT.test(changelog) ? ['platform-floor-raised'] : []),
@@ -93,17 +95,19 @@ export function families(repoByPackage) {
   return groups;
 }
 
+const target = (r) => `${r.name}:${r.reasons.includes('exact-pin') ? '' : '^'}${r.latest}`;
+
 /** The command that moves `names` to their latest, given each package row. */
 export function upgradeCommand(rows) {
-  const inside = rows.filter((r) => !r.reasons.includes('outside-constraint') && !r.reasons.includes('major-bump'));
+  const inside = rows.filter((r) => !['outside-constraint', 'major-bump', 'exact-pin'].some((x) => r.reasons.includes(x)));
   const outside = rows.filter((r) => !inside.includes(r));
   const cmds = [];
   if (inside.length) cmds.push(`flutter pub upgrade ${inside.map((r) => r.name).join(' ')}`);
   if (outside.length) {
     const dev = outside.filter((r) => r.section === 'dev');
     const main = outside.filter((r) => r.section !== 'dev');
-    if (main.length) cmds.push(`flutter pub add ${main.map((r) => `${r.name}:^${r.latest}`).join(' ')}`);
-    if (dev.length) cmds.push(`flutter pub add --dev ${dev.map((r) => `${r.name}:^${r.latest}`).join(' ')}`);
+    if (main.length) cmds.push(`flutter pub add ${main.map(target).join(' ')}`);
+    if (dev.length) cmds.push(`flutter pub add --dev ${dev.map(target).join(' ')}`);
   }
   return cmds.join(' && ');
 }

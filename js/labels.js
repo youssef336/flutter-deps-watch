@@ -2,7 +2,7 @@
 
 export const CATEGORY = {
   security: { label: 'ثغرة أمنية', hint: 'النسخة اللي عندك عليها advisory — حدّث الأول' },
-  locked: { label: 'مقفول', hint: 'متثبت عن قصد (override / git / تعليق / نسخة بالظبط) — متلمسوش من غير ما تقرا السبب' },
+  locked: { label: 'مقفول', hint: 'متثبت عن قصد (override / git / path / تعليق) — متلمسوش من غير ما تقرا السبب' },
   breaking: { label: 'بيكسر', hint: 'major أو الـ changelog بيقول breaking أو محتاج SDK أحدث' },
   attention: { label: 'محتاج انتباه', hint: 'native أو deprecations أو بيرفع minSdk — اقرا قبل ما تحدّث' },
   abandoned: { label: 'مهجور', hint: 'discontinued أو مفيش نسخة جديدة من سنة ونص' },
@@ -15,7 +15,7 @@ export const REASON = {
   override: 'متثبت في dependency_overrides',
   'non-hosted': 'جاي من git أو path مش من pub.dev',
   'pinned-note': 'تعليق في pubspec بيقول متتحدّثش',
-  'exact-pin': 'متثبت على نسخة بالظبط',
+  'exact-pin': 'متثبت على نسخة بالظبط (الأمر بيسيبه exact)',
   'major-bump': 'نسخة major جديدة',
   'changelog-breaking': 'الـ changelog بيذكر breaking',
   'needs-newer-sdk': 'محتاج Flutter/Dart أحدث من اللي عندك',

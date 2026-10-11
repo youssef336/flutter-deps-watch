@@ -144,6 +144,7 @@ test('classify: safe / upToDate / security', () => {
 test('classify: locked beats breaking, security beats locked', () => {
   eq(classify(base({ dep: dep({ section: 'override' }), latest: v('2.0.0') })).category, 'locked');
   eq(classify(base({ dep: dep({ note: 'Pinned until upstream fix' }) })).reasons, ['pinned-note']);
+  eq(classify(base({ dep: dep({ constraint: '1.0.0' }) })).category, 'attention');
   eq(classify(base({ dep: dep({ constraint: '1.0.0' }) })).reasons, ['exact-pin']);
   eq(classify(base({ dep: dep({ section: 'override' }), advisories: 2 })).category, 'security');
 });
@@ -191,6 +192,7 @@ test('plan: order, family travels with its worst member, commands', () => {
   eq(batches[1].command, 'flutter pub upgrade a && flutter pub add --dev d:^3.0.0');
   eq(batches[3].store, true);
   eq(upgradeCommand([rows[2]]), 'flutter pub add c:^2.0.0');
+  eq(upgradeCommand([row('e', 'attention', { latest: '1.4.0', reasons: ['exact-pin'] })]), 'flutter pub add e:1.4.0');
 });
 
 // ---------- github / scan helpers ----------

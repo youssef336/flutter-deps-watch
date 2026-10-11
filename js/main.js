@@ -1,7 +1,7 @@
 // Page controller: form → locate repo → scan → render. State lives in the URL
 // (?repo=owner/name&ref=…&path=…) so every report is a shareable link.
 
-import { CATEGORIES } from './classify.js';
+import { CATEGORIES, upgradeCommand } from './classify.js';
 import { GitHub, GitHubError, parseRepoInput } from './github.js';
 import { BATCH, CATEGORY, ERROR, REASON, SECTION, STAGE, TOOLCHAIN_SOURCE } from './labels.js';
 import { esc, markdown } from './md.js';
@@ -279,8 +279,7 @@ function pkgCard(p) {
     p.ota === false ? '<span class="badge store">native</span>' : '';
   const usage = !r.usageScanned ? '' : `${p.usage?.length ?? 0} فايل`;
   const pubUrl = `https://pub.dev/packages/${encodeURIComponent(p.name)}`;
-  const command = update && !p.locked ? (p.reasons.includes('outside-constraint') || p.reasons.includes('major-bump')
-    ? `flutter pub add ${p.section === 'dev' ? '--dev ' : ''}${p.name}:^${p.latest}` : `flutter pub upgrade ${p.name}`) : '';
+  const command = update && !p.locked ? upgradeCommand([p]) : '';
   return `
   <details class="pkg" style="--c: var(--${p.category})">
     <summary>

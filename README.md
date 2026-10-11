@@ -19,9 +19,9 @@
   | التصنيف | يعني |
   |---|---|
   | ثغرة أمنية | نسختك عليها advisory منشور |
-  | مقفول | override / git / path / نسخة بالظبط / تعليق زي "do not bump" |
+  | مقفول | override / git / path / تعليق زي "do not bump" |
   | بيكسر | major، أو الـ changelog بيقول breaking، أو محتاج Flutter/Dart أحدث |
-  | محتاج انتباه | plugin فيه native، أو deprecations، أو بيرفع minSdk/iOS |
+  | محتاج انتباه | plugin فيه native، أو deprecations، أو بيرفع minSdk/iOS، أو متثبت على نسخة بالظبط |
   | مهجور | discontinued أو مفيش نسخة جديدة من سنة ونص |
   | آمن | تحديث جوه الـ constraint ومفيش علامات خطر |
 
