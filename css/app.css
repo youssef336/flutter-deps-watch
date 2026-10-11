@@ -231,6 +231,25 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
 details.sub > summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
 details.sub[open] > summary { margin-bottom: 6px; }
 
+/* AI explanation */
+.settings-h { font-size: 1rem; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.settings-body select { width: 100%; padding: 7px 8px; font-size: 14px; }
+.model-row { display: flex; gap: 6px; }
+.ai-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
+.btn.ai { border-color: var(--accent); color: var(--accent); }
+.ai-out { border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border-radius: 10px; padding: 10px 14px; font-size: 14.5px; }
+.ai-out h4 { font-size: 15px; margin: 12px 0 4px; color: var(--accent); }
+.ai-out h4:first-child { margin-top: 0; }
+.ai-out ul { margin: 4px 0; padding-inline-start: 20px; }
+.ai-out p { margin: 4px 0; }
+.ai-out code { direction: ltr; unicode-bidi: isolate; }
+.ai-out pre { direction: ltr; text-align: left; background: var(--code-bg); padding: 8px; border-radius: 6px; overflow-x: auto; }
+.ai-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
+.ai-err { color: var(--security); font-size: 13.5px; }
+.typing::after { content: '▍'; animation: blink 1s steps(2) infinite; color: var(--accent); }
+@keyframes blink { 50% { opacity: 0; } }
+
 @media (max-width: 760px) {
   .strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .filter { width: 100%; }

@@ -92,6 +92,26 @@
     <input id="token-input" type="password" dir="ltr" autocomplete="off" placeholder="github_pat_…">
     <p class="muted small">محتاجه بس للـ repos الـ private، أو لو GitHub وقفك بعد 60 طلب في الساعة. اعمل fine-grained token صلاحيته <b>Contents: Read-only</b> بس. الـ token بيروح لـ api.github.com وبس.</p>
     <label class="check"><input type="checkbox" id="token-remember"> افتكره على الجهاز ده</label>
+
+    <h3 class="settings-h">شرح التحديث بالـ AI</h3>
+    <p class="muted small">زرار «اشرحلي التحديث ده» على كل باكدج بيكتبلك بالمصري إيه اللي اتغيّر ومعناه إيه لكودك وتعمل إيه. بيشتغل بمفتاح API بتاعك إنت: المفتاح بيروح لمزوّد الـ AI وبس، وكل شرح بيبعتله الـ changelog وسطور من الفايلات اللي بتستخدم الباكدج.</p>
+    <label for="ai-provider">المزوّد</label>
+    <select id="ai-provider">
+      <option value="">مقفول</option>
+      <option value="gemini">Gemini (Google) — فيه خطة مجانية</option>
+      <option value="claude">Claude (Anthropic)</option>
+    </select>
+    <div id="ai-fields" hidden>
+      <label for="ai-key">API key <a id="ai-key-link" class="small" target="_blank" rel="noopener">هات مفتاح</a></label>
+      <input id="ai-key" type="password" dir="ltr" autocomplete="off">
+      <label for="ai-model">الموديل</label>
+      <div class="model-row">
+        <select id="ai-model" dir="ltr"></select>
+        <button class="btn sm" id="ai-load-models" type="button" hidden>هات الموديلات</button>
+      </div>
+      <p class="muted small" id="ai-model-note"></p>
+      <label class="check"><input type="checkbox" id="ai-remember"> افتكر المفتاح على الجهاز ده</label>
+    </div>
     <div class="settings-actions">
       <button class="btn" value="cancel" type="submit">إلغاء</button>
       <button class="btn primary" id="token-save" value="save" type="submit">حفظ</button>

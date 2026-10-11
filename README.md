@@ -21,7 +21,9 @@
 code), counts how many files in `lib/` import it, and sorts
 > everything into *vulnerable / locked / breaking / needs attention / abandoned / safe*. The result is
 > an ordered upgrade plan with copy-ready `flutter pub` commands, a shareable `?repo=owner/name` link
-> and a one-click Markdown export for PRs. Plain ES modules, no dependencies, unit-tested in headless Chrome.
+> and a one-click Markdown export for PRs. An optional **"explain this upgrade"** button streams an
+> Egyptian-Arabic walkthrough from your own Claude or Gemini key, grounded in the changelog and the lines of
+> *your* code that use the package. Plain ES modules, no dependencies, unit-tested in headless Chrome.
 
 **🔗 الموقع:** https://youssef336.github.io/flutter-deps-watch/
 
@@ -44,6 +46,11 @@ code), counts how many files in `lib/` import it, and sorts
   العدد بيظهر على كل باكدج، وعلى كل مجموعة في الخطة («هتاخد: 12 تصليح · 5 جديد»)، وعلى المشروع كله.
 - 🎯 **«في كودك»**: لو حاجة بتكسر أو اتصلحت بتذكر API بين `backticks`، الصفحة بتدوّر عليه في
   الفايلات اللي بتعمل import للباكدج ده عندك، ولو لقته بتعلّم عليه.
+- 🤖 **«اشرحلي التحديث ده» بالـ AI**: زرار على كل باكدج بيكتبلك بالمصري:
+  **الخلاصة** (التحديث عن إيه، و«حدّث دلوقتي / حدّث بحذر / استنى»)، و**اتصلح / اتضاف / بيكسر**
+  (والـ breaking بيقولك بيلمس أنهي فايل عندك)، و**هتعمل إيه** (الأمر، وتعديلات الكود، وخطوات
+  native لو فيه، وتجرّب إيه). بيبعت للموديل الـ changelog **والسطور من كودك** اللي بتستخدم الباكدج،
+  فالشرح على مشروعك مش كلام عام، وبيتحفظ على جهازك فمش بتدفع تاني لنفس التحديث.
 - 🔎 **بيعدّ الاستخدام**: أنهي فايلات في `lib/` بتعمل import لكل باكدج.
 - 🏷 **بيصنّف** كل باكدج في واحدة من دول:
 
@@ -68,6 +75,18 @@ code), counts how many files in `lib/` import it, and sorts
 بيروح لـ `api.github.com` وبس، ومش بيتحفظ غير لو علّمت «افتكره». من غير token الـ repos
 العامة شغالة عادي، بس GitHub بيسمح بـ 60 طلب API في الساعة (وكل فحص بياخد 2).
 
+## 🤖 مفتاح الـ AI
+
+من ⚙︎ اختار المزوّد وحط مفتاحك:
+
+- **Gemini**: فيه خطة مجانية. هات مفتاح من https://aistudio.google.com/apikey ودوس «هات الموديلات».
+- **Claude**: من https://console.anthropic.com/settings/keys. الافتراضي Claude Opus 5.5 (الأدق)،
+  وفيه Sonnet 5.5 و Haiku 4.5 أرخص. لو الموديل رفض طلب، بيتعاد تلقائيًا على الموديل البديل
+  اللي Anthropic بتنصح بيه (`fallbacks: "default"`).
+
+المفتاح بيروح لمزوّد الـ AI وبس (من المتصفح على طول)، ومش بيتحفظ غير لو علّمت «افتكر».
+خلي بالك إن كل شرح بيبعت سطور من كودك للمزوّد ده.
+
 ## 🎯 الـ Flutter اللي بيقارن بيه
 
 بياخده من `.fvmrc` أو `.fvm/fvm_config.json` أو `.tool-versions`. لو المشروع مش مثبّت
@@ -86,6 +105,8 @@ code), counts how many files in `lib/` import it, and sorts
 - Vanilla JavaScript (ES modules), HTML and CSS: no framework, no npm dependencies, no build step.
 - APIs (all CORS-enabled, called straight from the browser): GitHub REST + `raw.githubusercontent.com`,
   pub.dev API (packages, scores, security advisories) and package archives, Flutter release index.
+- Optional AI: the official Anthropic TypeScript SDK (loaded as an ES module from jsDelivr) or the Gemini
+  REST API, streamed straight from the browser with the viewer's own key.
 - Native browser `DecompressionStream` + a tiny tar reader to pull `CHANGELOG.md` out of package archives.
 - Hosted on GitHub Pages; tests run in headless Chrome via GitHub Actions.
 
@@ -97,11 +118,12 @@ code), counts how many files in `lib/` import it, and sorts
 | `js/pubspec.js` | pubspec / lock / changelog / advisory parsers (keeps comments) |
 | `js/classify.js` | verdict per package + upgrade plan |
 | `js/notes.js` | changelog → breaking / feature / fix / other, and "used in your code" hits |
+| `js/ai.js` | "explain this upgrade": prompt + code excerpts, Claude (official SDK) and Gemini, streaming |
 | `js/github.js`, `js/pub.js` | GitHub, pub.dev and Flutter-release lookups |
 | `js/tar.js` | gunzip + tar reader for package archives |
 | `js/scan.js` | one scan, end to end |
 | `js/main.js`, `js/labels.js`, `js/md.js` | page, Arabic strings, safe Markdown for changelogs |
-| `tests/` | in-browser unit tests |
+| `tests/` | in-browser unit tests (the AI tests mock `fetch` and run the real SDK) |
 | `tool/test.sh` | runs the tests in headless Chrome |
 
 ## 🚀 Getting started

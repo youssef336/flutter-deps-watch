@@ -22,7 +22,7 @@ done
 # Headless Chrome sometimes dumps before the modules have run; retry until the
 # page reports a real result.
 for _ in 1 2 3 4 5; do
-  DOM="$("$CHROME" --headless=new --disable-gpu --virtual-time-budget=10000 --dump-dom "http://127.0.0.1:$PORT/tests/index.html" 2>/dev/null)"
+  DOM="$("$CHROME" --headless=new --disable-gpu --virtual-time-budget=30000 --dump-dom "http://127.0.0.1:$PORT/tests/index.html" 2>/dev/null)"
   echo "$DOM" | grep -q 'data-status="running"' || break
 done
 echo "$DOM" | sed -n 's/.*<h1 id="summary">\(.*\)<\/h1>.*/\1/p'

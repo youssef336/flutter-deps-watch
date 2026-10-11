@@ -1,6 +1,7 @@
 // Unit tests for the pure modules. Open tests/index.html (served over http) or
 // run `bash tool/test.sh` for headless Chrome.
 
+import { AiError, buildPrompt, codeExcerpts, explain, geminiModels } from '../js/ai.js';
 import { classify, families, plan, repoKey, upgradeCommand } from '../js/classify.js';
 import { parseRepoInput } from '../js/github.js';
 import { esc, markdown } from '../js/md.js';
@@ -11,6 +12,11 @@ import { Constraint, Version } from '../js/semver.js';
 import { readFromTar } from '../js/tar.js';
 
 const results = [];
+// Async tests run one after another: several of them swap globalThis.fetch.
+let chain = Promise.resolve();
+function testAsync(name, fn) {
+  chain = chain.then(fn).then(() => results.push({ name, ok: true }), (e) => results.push({ name, ok: false, error: e.message }));
+}
 function test(name, fn) {
   try {
     fn();
@@ -360,7 +366,101 @@ test('classify: parsed notes override the loose "breaking" text match', () => {
   eq(classify(base({ changelog: prose, changelogBreaking: false })).category, 'safe');
 });
 
+
+// ---------- AI explanation (fetch is mocked; the real Anthropic SDK runs) ----------
+function sse(events) {
+  const body = events.map((e) => (e.event ? `event: ${e.event}\n` : '') + `data: ${JSON.stringify(e.data)}\n\n`).join('');
+  return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+async function withFetch(handler, fn) {
+  const real = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const req = new Request(input, init);
+    const call = { url: req.url, headers: Object.fromEntries(req.headers), body: init.body ? JSON.parse(await req.clone().text()) : null };
+    calls.push(call);
+    return handler(call);
+  };
+  try {
+    return await fn(calls);
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+const claudeStream = (texts, stop = 'end_turn') => sse([
+  { event: 'message_start', data: { type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } } },
+  { event: 'content_block_start', data: { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } } },
+  ...texts.map((t) => ({ event: 'content_block_delta', data: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: t } } })),
+  { event: 'content_block_stop', data: { type: 'content_block_stop', index: 0 } },
+  { event: 'message_delta', data: { type: 'message_delta', delta: { stop_reason: stop, stop_sequence: null }, usage: { output_tokens: 5 } } },
+  { event: 'message_stop', data: { type: 'message_stop' } },
+]);
+
+testAsync('ai: Claude request shape and streamed text (real SDK)', () => withFetch(() => claudeStream(['## الخلاصة\n', 'حدّث دلوقتي.']), async (calls) => {
+  const seen = [];
+  const text = await explain({ provider: 'claude', key: 'sk-ant-test', model: 'claude-opus-5-5', prompt: 'P', onText: (t) => seen.push(t) });
+  eq(text, '## الخلاصة\nحدّث دلوقتي.');
+  eq(seen.at(-1), text);
+  const c = calls[0];
+  eq(new URL(c.url).pathname, '/v1/messages');
+  eq(c.headers['x-api-key'], 'sk-ant-test');
+  eq(c.headers['anthropic-dangerous-direct-browser-access'], 'true');
+  eq(c.headers['anthropic-beta'].includes('server-side-fallback-2026-07-01'), true);
+  eq([c.body.model, c.body.fallbacks, c.body.output_config, c.body.stream, c.body.messages], ['claude-opus-5-5', 'default', { effort: 'medium' }, true, [{ role: 'user', content: 'P' }]]);
+  eq(c.body.system.includes('Egyptian Arabic'), true);
+}));
+testAsync('ai: Haiku sends neither effort nor fallbacks', () => withFetch(() => claudeStream(['ok']), async (calls) => {
+  await explain({ provider: 'claude', key: 'k', model: 'claude-haiku-4-5', prompt: 'P', onText: () => {} });
+  eq([calls[0].body.fallbacks, calls[0].body.output_config, calls[0].headers['anthropic-beta'] ?? null], [undefined, undefined, null]);
+}));
+testAsync('ai: Claude refusal and bad key map to typed errors', async () => {
+  const code = (p) => p.then(() => 'none', (e) => (e instanceof AiError ? e.code : `raw ${e}`));
+  eq(await withFetch(() => claudeStream([], 'refusal'), () => code(explain({ provider: 'claude', key: 'k', model: 'claude-opus-5-5', prompt: 'P', onText: () => {} }))), 'refusal');
+  const unauthorized = () => new Response(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }), { status: 401, headers: { 'content-type': 'application/json' } });
+  eq(await withFetch(unauthorized, () => code(explain({ provider: 'claude', key: 'bad', model: 'claude-opus-5-5', prompt: 'P', onText: () => {} }))), 'auth');
+});
+testAsync('ai: Gemini streams SSE text and skips thoughts', () => withFetch(() => sse([
+  { data: { candidates: [{ content: { parts: [{ text: 'thinking…', thought: true }, { text: '## الخلاصة\n' }] } }] } },
+  { data: { candidates: [{ content: { parts: [{ text: 'استنى.' }] }, finishReason: 'STOP' }] } },
+]), async (calls) => {
+  const text = await explain({ provider: 'gemini', key: 'AIza-test', model: 'gemini-x-flash', prompt: 'P', onText: () => {} });
+  eq(text, '## الخلاصة\nاستنى.');
+  eq(calls[0].url.endsWith('/models/gemini-x-flash:streamGenerateContent?alt=sse'), true);
+  eq(calls[0].headers['x-goog-api-key'], 'AIza-test');
+  eq(calls[0].body.contents, [{ role: 'user', parts: [{ text: 'P' }] }]);
+}));
+testAsync('ai: Gemini model list prefers the newest stable flash', () => withFetch(() => new Response(JSON.stringify({ models: [
+  { name: 'models/gemini-2.0-flash', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-3.0-flash', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-3.0-flash-lite', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-3.0-pro', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-3.5-flash-preview', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] },
+  { name: 'models/gemini-3.0-flash-tts', supportedGenerationMethods: ['generateContent'] },
+] }), { status: 200 }), async () => {
+  eq(await geminiModels('k'), ['gemini-3.0-flash', 'gemini-2.0-flash', 'gemini-3.0-pro', 'gemini-3.0-flash-lite', 'gemini-3.5-flash-preview']);
+}));
+testAsync('ai: prompt carries facts, changelog and the project lines that use the API', async () => {
+  const p = {
+    name: 'equatable', current: '2.0.8', latest: '3.0.0', constraint: '^2.0.5', section: 'main', category: 'breaking',
+    reasons: ['major-bump'], native: false, requires: { sdk: '^3.12.0' }, note: '', usage: ['lib/a.dart', 'lib/b.dart'],
+    changelog: '## 3.0.0\n- **BREAKING** remove `EquatableMixin`',
+  };
+  const files = {
+    'lib/a.dart': "import 'package:equatable/equatable.dart';\nclass A with EquatableMixin {\n  int x = 1;\n}",
+    'lib/b.dart': "import 'package:equatable/equatable.dart';\nclass B extends Equatable {}",
+  };
+  const excerpts = await codeExcerpts(p, async (path) => files[path]);
+  eq(excerpts, "lib/a.dart:1: import 'package:equatable/equatable.dart';\nlib/a.dart:2: class A with EquatableMixin {\nlib/b.dart:1: import 'package:equatable/equatable.dart';");
+  const prompt = buildPrompt(p, { toolchain: { version: '3.47.7', dart: '3.13.5' }, families: {} }, excerpts);
+  eq(prompt.includes('upgrade: 2.0.8 -> 3.0.0'), true);
+  eq(prompt.includes('<changelog from="2.0.8" to="3.0.0">'), true);
+  eq(prompt.includes('lib/a.dart:2: class A with EquatableMixin {'), true);
+  eq(prompt.includes('project toolchain: Flutter 3.47.7 (Dart 3.13.5)'), true);
+});
+
 // ---------- report ----------
+await chain;
 const failed = results.filter((r) => !r.ok);
 document.getElementById('out').textContent = results
   .map((r) => `${r.ok ? 'PASS' : 'FAIL'} ${r.name}${r.ok ? '' : ` — ${r.error}`}`).join('\n');

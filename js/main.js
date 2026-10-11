@@ -3,7 +3,8 @@
 
 import { CATEGORIES, upgradeCommand } from './classify.js';
 import { GitHub, GitHubError, parseRepoInput } from './github.js';
-import { BATCH, CATEGORY, ERROR, REASON, SECTION, STAGE, TOOLCHAIN_SOURCE } from './labels.js';
+import { AiError, PROVIDERS, buildPrompt, codeExcerpts, explain, geminiModels } from './ai.js';
+import { AI_ERROR, BATCH, CATEGORY, ERROR, REASON, SECTION, STAGE, TOOLCHAIN_SOURCE } from './labels.js';
 import { esc, markdown } from './md.js';
 import { noteCounts } from './notes.js';
 import { flutterReleases } from './pub.js';
@@ -15,7 +16,12 @@ const store = {
   set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
 let sessionToken = store.get('fdw.token') || '';
-const state = { report: null, filter: null, query: '', all: false, busy: false };
+const state = { report: null, filter: null, query: '', all: false, busy: false, ai: {} };
+const ai = {
+  provider: store.get('fdw.ai.provider') || '',
+  model: store.get('fdw.ai.model') || '',
+  key: store.get('fdw.ai.key') || '',
+};
 
 // ---------- theme ----------
 const savedTheme = store.get('fdw.theme');
@@ -30,16 +36,73 @@ $('theme-btn').addEventListener('click', () => {
 });
 
 // ---------- settings ----------
-$('settings-btn').addEventListener('click', () => {
+$('settings-btn').addEventListener('click', () => openSettings());
+
+function openSettings() {
   $('token-input').value = sessionToken;
   $('token-remember').checked = !!store.get('fdw.token');
+  $('ai-provider').value = ai.provider;
+  $('ai-key').value = ai.key;
+  $('ai-remember').checked = !!store.get('fdw.ai.key');
+  fillAiFields(ai.provider, ai.model);
   $('settings').showModal();
+}
+
+function geminiCache() {
+  try { return JSON.parse(store.get('fdw.ai.geminiModels') || '[]'); } catch { return []; }
+}
+
+function fillAiFields(provider, selected) {
+  $('ai-fields').hidden = !provider;
+  if (!provider) return;
+  const meta = PROVIDERS[provider];
+  $('ai-key').placeholder = meta.keyHint;
+  $('ai-key-link').href = meta.keyUrl;
+  const models = provider === 'claude' ? meta.models : geminiCache().map((id) => ({ id, label: id }));
+  $('ai-model').innerHTML = models.map((m) => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+  if (selected && models.some((m) => m.id === selected)) $('ai-model').value = selected;
+  $('ai-load-models').hidden = provider !== 'gemini';
+  $('ai-model-note').textContent = provider === 'claude'
+    ? 'Opus هو الأدق. الشرح الواحد بيكلّف سنتات قليلة حسب حجم الـ changelog.'
+    : models.length ? '' : 'حط المفتاح ودوس «هات الموديلات».';
+}
+
+$('ai-provider').addEventListener('change', (e) => fillAiFields(e.target.value, ''));
+$('ai-load-models').addEventListener('click', async () => {
+  const key = $('ai-key').value.trim();
+  if (!key) return toast('حط المفتاح الأول');
+  $('ai-load-models').disabled = true;
+  try {
+    const models = await geminiModels(key);
+    store.set('fdw.ai.geminiModels', JSON.stringify(models));
+    fillAiFields('gemini', $('ai-model').value);
+    toast(models.length ? `${models.length} موديل` : 'مفيش موديلات متاحة للمفتاح ده');
+  } catch (e) {
+    toast(AI_ERROR[e instanceof AiError ? e.code : 'unknown']);
+  } finally {
+    $('ai-load-models').disabled = false;
+  }
 });
-$('settings').addEventListener('close', () => {
+
+$('settings').addEventListener('close', async () => {
   if ($('settings').returnValue !== 'save') return;
   sessionToken = $('token-input').value.trim();
   store.set('fdw.token', $('token-remember').checked && sessionToken ? sessionToken : null);
-  toast(sessionToken ? 'اتحفظ الـ token' : 'اتشال الـ token');
+  ai.provider = $('ai-provider').value;
+  ai.key = $('ai-key').value.trim();
+  ai.model = $('ai-model').value;
+  if (ai.provider === 'gemini' && ai.key && !ai.model) {
+    try {
+      const models = await geminiModels(ai.key);
+      store.set('fdw.ai.geminiModels', JSON.stringify(models));
+      ai.model = models[0] || '';
+    } catch { /* surfaced when the viewer presses explain */ }
+  }
+  store.set('fdw.ai.provider', ai.provider || null);
+  store.set('fdw.ai.model', ai.model || null);
+  store.set('fdw.ai.key', $('ai-remember').checked && ai.key ? ai.key : null);
+  toast('اتحفظت الإعدادات');
+  renderLedger();
 });
 
 // ---------- toolchain picker ----------
@@ -357,7 +420,7 @@ function pkgCard(p) {
       </dl>
       ${p.advisories?.length ? `<div class="block-title">ثغرات</div><ul>${p.advisories.map((a) => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.id)}</a> <span dir="ltr">${esc(a.summary)}</span>${a.fixed ? ` — اتصلحت في ${esc(a.fixed)}` : ''}</li>`).join('')}</ul>` : ''}
       ${command ? `<div class="block-title">أمر التحديث</div><div class="cmd"><code>${esc(command)}</code><button type="button" class="btn sm" data-copy="${esc(command)}">انسخ</button></div>` : ''}
-      ${update ? `<div class="block-title">هتاخد إيه من ${esc(p.current)} لـ ${esc(p.latest)}</div>${p.changelog ? notesBlock(p) : '<p class="muted small">الباكدج مفيهوش CHANGELOG.md بنسخ واضحة — شوفه على pub.dev.</p>'}` : ''}
+      ${update ? `<div class="block-title">هتاخد إيه من ${esc(p.current)} لـ ${esc(p.latest)}</div>${aiBlock(p)}${p.changelog ? notesBlock(p) : '<p class="muted small">الباكدج مفيهوش CHANGELOG.md بنسخ واضحة — شوفه على pub.dev.</p>'}` : ''}
       ${p.usage?.length ? `<div class="block-title">مستخدم في</div><ul class="files">${p.usage.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
       <div class="links">
         ${p.onPub ? `<a href="${pubUrl}" target="_blank" rel="noopener">pub.dev</a><a href="${pubUrl}/changelog" target="_blank" rel="noopener">الـ changelog كله</a>` : ''}
@@ -368,8 +431,103 @@ function pkgCard(p) {
 }
 $('ledger').addEventListener('click', (e) => {
   const b = e.target.closest('[data-copy]');
-  if (b) copy(b.dataset.copy, 'اتنسخ الأمر');
+  if (b) return copy(b.dataset.copy, 'اتنسخ');
+  const a = e.target.closest('[data-ai]');
+  if (a) return runAi(a.dataset.ai, a.dataset.redo === '1');
 });
+
+// ---------- AI explanation ----------
+const aiCacheKey = (p) => {
+  const r = state.report;
+  return `fdw.ai.cache.${ai.provider}.${ai.model}.${r.owner}/${r.repo}.${p.name}.${p.current}.${p.latest}`;
+};
+
+function aiEntry(p) {
+  if (!state.ai[p.name] && ai.provider) {
+    const text = store.get(aiCacheKey(p));
+    if (text) state.ai[p.name] = { status: 'done', text, cached: true, model: ai.model };
+  }
+  return state.ai[p.name];
+}
+
+function aiBlock(p) {
+  return `<div class="ai-box" data-ai-box="${esc(p.name)}">${aiInner(p)}</div>`;
+}
+
+function aiInner(p) {
+  const entry = aiEntry(p);
+  const running = entry?.status === 'running';
+  const label = running ? 'وقّف' : entry?.status === 'done' ? 'اشرحلي تاني' : '✨ اشرحلي التحديث ده';
+  return `<div class="ai-bar">
+      <button type="button" class="btn sm ai" data-ai="${esc(p.name)}"${entry?.status === 'done' ? ' data-redo="1"' : ''}>${label}</button>
+      <span class="muted small">${ai.provider ? `بـ ${esc(ai.model || PROVIDERS[ai.provider].label)}` : 'محتاج مفتاح AI من ⚙︎'}</span>
+    </div>${aiResult(entry)}`;
+}
+
+function aiResult(entry) {
+  if (!entry) return '';
+  if (entry.status === 'error') return `<p class="ai-err">${esc(entry.error)}</p>`;
+  if (entry.status === 'running' && !entry.text) return `<p class="muted small typing">${esc(entry.stage || 'بيكتب')}</p>`;
+  return `<div class="ai-out${entry.status === 'running' ? ' typing' : ''}">${markdown(entry.text)}</div>${
+    entry.status === 'done' ? `<div class="ai-meta">${esc(entry.model || '')}${entry.cached ? ' · محفوظ من قبل كده' : ''} · <button type="button" class="linkish" data-copy="${esc(entry.text)}">انسخ</button></div>` : ''}`;
+}
+
+// Streaming repaints are batched per frame; a card that was re-rendered (filter,
+// search) picks the current state up again through aiEntry().
+let paintQueued = new Set();
+let paintScheduled = false;
+function paintAi(name) {
+  paintQueued.add(name);
+  if (paintScheduled) return;
+  paintScheduled = true;
+  requestAnimationFrame(() => {
+    paintScheduled = false;
+    for (const n of paintQueued) {
+      const p = state.report?.rows.find((r) => r.name === n);
+      const box = p && document.querySelector(`[data-ai-box="${CSS.escape(n)}"]`);
+      if (box) box.innerHTML = aiInner(p);
+    }
+    paintQueued = new Set();
+  });
+}
+
+async function runAi(name, redo) {
+  const p = state.report?.rows.find((r) => r.name === name);
+  if (!p) return;
+  const current = state.ai[name];
+  if (current?.status === 'running') {
+    current.controller.abort();
+    return;
+  }
+  if (!ai.provider || !ai.key || !ai.model) {
+    toast('اختار مزوّد AI وحط المفتاح الأول');
+    return openSettings();
+  }
+  if (redo) store.set(aiCacheKey(p), null);
+  const entry = { status: 'running', text: '', stage: 'بجمع السطور اللي بتستخدم الباكدج من كودك', controller: new AbortController(), model: ai.model };
+  state.ai[name] = entry;
+  paintAi(name);
+  try {
+    const r = state.report;
+    const gh = new GitHub(sessionToken);
+    const prefix = r.dir ? `${r.dir}/` : '';
+    const excerpts = r.usageScanned ? await codeExcerpts(p, (path) => gh.file(r.owner, r.repo, r.ref, prefix + path)) : '';
+    entry.stage = 'بيكتب';
+    paintAi(name);
+    entry.text = await explain({
+      provider: ai.provider, key: ai.key, model: ai.model, prompt: buildPrompt(p, r, excerpts),
+      signal: entry.controller.signal,
+      onText: (t) => { entry.text = t; paintAi(name); },
+    });
+    entry.status = 'done';
+    store.set(aiCacheKey(p), entry.text);
+  } catch (e) {
+    const code = e instanceof AiError ? e.code : 'unknown';
+    if (code === 'aborted' && entry.text) entry.status = 'done';
+    else Object.assign(entry, { status: 'error', error: AI_ERROR[code] });
+  }
+  paintAi(name);
+}
 
 // ---------- markdown export ----------
 function toMarkdown(r) {
@@ -407,6 +565,8 @@ function toMarkdown(r) {
         if (items.length > cap) lines.push(`- …and ${items.length - cap} more`);
         lines.push('');
       }
+      const explained = state.ai[p.name]?.status === 'done' && state.ai[p.name].text;
+      if (explained) lines.push('**شرح بالـ AI**', '', explained, '');
       lines.push('</details>', '');
     }
   }
