@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flutter Deps Watch</title>
+<meta name="description" content="افحص باكدجات أي مشروع Flutter على GitHub: إيه اللي قديم، إيه اللي بيكسر، وإيه الأمان تحدّثه دلوقتي.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f766e'/%3E%3Cpath d='M9 17l5 5 9-12' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-row">
+    <a class="brand" href="./" aria-label="Flutter Deps Watch">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Flutter Deps Watch</span>
+    </a>
+    <div class="top-actions">
+      <button class="icon-btn" id="settings-btn" type="button" aria-haspopup="dialog" title="الإعدادات">⚙︎</button>
+      <button class="icon-btn" id="theme-btn" type="button" title="فاتح / غامق">◐</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero" id="hero">
+    <h1>باكدجات مشروعك، بالبلدي.</h1>
+    <p class="muted">حط لينك أي repo Flutter على GitHub. الصفحة بتقرا <code>pubspec.yaml</code> و <code>pubspec.lock</code>، وتسأل pub.dev عن كل باكدج، وتقولك إيه الآمن تحدّثه دلوقتي وإيه اللي محتاج تقعد معاه. كله بيحصل في المتصفح بتاعك، مفيش server.</p>
+  </section>
+
+  <form class="scan-form" id="scan-form" autocomplete="off">
+    <label class="sr" for="repo-input">لينك الـ repo</label>
+    <input id="repo-input" class="repo-input" dir="ltr" type="text" inputmode="url" spellcheck="false"
+           placeholder="https://github.com/owner/repo" required>
+    <button class="btn primary" id="scan-btn" type="submit">افحص</button>
+    <div class="form-opts">
+      <label class="check"><input type="checkbox" id="usage-check" checked> عدّ الاستخدام في <code>lib/</code></label>
+      <label class="select-label">Flutter
+        <select id="flutter-select"><option value="">تلقائي</option></select>
+      </label>
+    </div>
+  </form>
+  <div class="recent" id="recent" hidden></div>
+
+  <div class="picker" id="picker" hidden>
+    <p>الـ repo فيه أكتر من مشروع. اختار واحد:</p>
+    <div class="picker-list" id="picker-list"></div>
+  </div>
+
+  <div class="progress" id="progress" hidden role="status" aria-live="polite">
+    <div class="progress-text" id="progress-text"></div>
+    <div class="progress-bar"><span id="progress-fill"></span></div>
+  </div>
+
+  <div class="alert error" id="error" hidden role="alert"></div>
+
+  <section id="report" hidden>
+    <div class="project" id="project"></div>
+    <div class="strip" id="strip" role="group" aria-label="التصنيفات"></div>
+    <div id="security"></div>
+    <section class="plan" id="plan-section">
+      <h2>ترتيب التحديث</h2>
+      <p class="muted">كل مجموعة PR لوحدها، بالترتيب ده. الباكدجات اللي من نفس الـ repo (زي firebase_*) بتتحرك مع بعض دايمًا.</p>
+      <div id="plan"></div>
+    </section>
+    <section class="ledger">
+      <div class="ledger-head">
+        <h2>كل الباكدجات</h2>
+        <div class="ledger-tools">
+          <input id="filter-input" class="filter" type="search" placeholder="ابحث باسم الباكدج…">
+          <label class="check"><input type="checkbox" id="show-all"> اظهر المحدّثة كمان</label>
+        </div>
+      </div>
+      <div id="ledger"></div>
+    </section>
+  </section>
+</main>
+
+<footer class="foot wrap muted">
+  <span>البيانات من pub.dev و GitHub و Flutter releases، مباشرة من المتصفح.</span>
+  <a href="https://github.com/youssef336/flutter-deps-watch" target="_blank" rel="noopener">المصدر على GitHub</a>
+</footer>
+
+<dialog id="settings">
+  <form method="dialog" class="settings-body">
+    <h2>الإعدادات</h2>
+    <label for="token-input">GitHub token <span class="muted">(اختياري)</span></label>
+    <input id="token-input" type="password" dir="ltr" autocomplete="off" placeholder="github_pat_…">
+    <p class="muted small">محتاجه بس للـ repos الـ private، أو لو GitHub وقفك بعد 60 طلب في الساعة. اعمل fine-grained token صلاحيته <b>Contents: Read-only</b> بس. الـ token بيروح لـ api.github.com وبس.</p>
+    <label class="check"><input type="checkbox" id="token-remember"> افتكره على الجهاز ده</label>
+    <div class="settings-actions">
+      <button class="btn" value="cancel" type="submit">إلغاء</button>
+      <button class="btn primary" id="token-save" value="save" type="submit">حفظ</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
