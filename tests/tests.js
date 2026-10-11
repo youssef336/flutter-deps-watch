@@ -4,6 +4,7 @@
 import { classify, families, plan, repoKey, upgradeCommand } from '../js/classify.js';
 import { parseRepoInput } from '../js/github.js';
 import { esc, markdown } from '../js/md.js';
+import { identifiers, markHits, parseNotes } from '../js/notes.js';
 import { advisoryAffects, changelogSlice, parseEnvironment, parseLock, parsePubspec } from '../js/pubspec.js';
 import { pubspecDirs } from '../js/scan.js';
 import { Constraint, Version } from '../js/semver.js';
@@ -237,6 +238,126 @@ test('markdown escapes html and keeps only http links', () => {
   eq(html.includes('href="https://x.dev"'), true);
   eq(html.includes('javascript:alert'), true); // left as escaped text, not a link
   eq(html.includes('href="javascript'), false);
+});
+
+
+// ---------- notes (what an upgrade brings) ----------
+const kinds = (n) => Object.fromEntries(Object.entries(n).map(([k, v]) => [k, v.map((i) => i.text)]));
+test('notes: melos tags, commit links stripped', () => {
+  const n = parseNotes(`## 13.0.0
+
+> Note: This release has breaking changes.
+
+ - **BREAKING** **FEAT**(device_info_plus): Bump win32 to 6.0.0 ([#3791](https://x/3791)). ([abcdef12](https://x/c))
+ - **FIX**(device_info_plus): Apply KGP ([#3947](https://x/3947)). ([36414d4c](https://x/c))
+ - **FEAT**(device_info_plus): Add build timestamp ([#3969](https://x/3969)).
+ - **REFACTOR**(device_info_plus): Change Gradle to Kotlin`);
+  eq(n.fix.map((i) => i.text), ['Apply KGP ([#3947](https://x/3947)).']);
+  eq(n.feature.map((i) => i.text), ['Add build timestamp ([#3969](https://x/3969)).']);
+  eq(n.breaking.length, 2);
+  eq(n.other.map((i) => i.text), ['Change Gradle to Kotlin']);
+  eq(n.fix[0].version, '13.0.0');
+});
+test('notes: conventional commits and bang', () => {
+  const n = parseNotes(`# 3.0.0
+- **BREAKING** refactor!: remove \`EquatableMixin\` (#217)
+- feat: add \`MultiBlocObserver\`
+- fix: \`isClosed\` should incorporate event controller state
+- docs: fix gallery image urls
+- refactor!: drop legacy api`);
+  eq(kinds(n), {
+    breaking: ['**BREAKING** refactor!: remove `EquatableMixin` (#217)', 'Drop legacy api'],
+    feature: ['Add `MultiBlocObserver`'], fix: ['`isClosed` should incorporate event controller state'],
+    other: ['Fix gallery image urls'],
+  });
+});
+test('notes: keep-a-changelog and bold sections, heading section', () => {
+  const n = parseNotes(`## 14.0.0
+
+**Breaking Changes**
+- add support for AGP 9
+
+**Features**:
+- Add support for scene delegates
+
+**Bugs**
+- Fixed scrolling issue for the cardfield in web (#2045)
+
+## [3.0.0] [Breaking Changes]
+- \`Bone.button()\` no longer reads Material themes.
+
+## 2.9.0
+### Added
+- Something new
+### Fixed
+- Add missing null check
+### Changed
+- Fixes a crash on resume`);
+  eq(kinds(n), {
+    breaking: ['add support for AGP 9', '`Bone.button()` no longer reads Material themes.'],
+    feature: ['Add support for scene delegates', 'Something new'],
+    fix: ['Fixed scrolling issue for the cardfield in web (#2045)', 'Add missing null check', 'Fixes a crash on resume'],
+    other: [],
+  });
+});
+test('notes: verbs, prose "breaking", wrapped lines, paragraphs', () => {
+  const n = parseNotes(`## 5.11.1
+
+- Fix response stream not propagating backpressure.
+  When a consumer paused the stream, the source was never paused.
+- Fix \`NoSuchMethodError\` when a class \`implements Interceptor\`, breaking any class using it.
+- Add \`query\` convenience methods.
+- Updates minimum supported SDK version to Flutter 3.44/Dart 3.12.
+
+## 18.0.1
+
+Clarifies \`onEnter\` documentation.`);
+  eq(n.breaking.length, 0);
+  eq(n.fix.length, 2);
+  eq(n.fix[0].text, 'Fix response stream not propagating backpressure. When a consumer paused the stream, the source was never paused.');
+  eq(n.feature.map((i) => i.text), ['Add `query` convenience methods.']);
+  eq(n.other.length, 2);
+});
+test('notes: platform groups, PR refs, pre-release dedupe', () => {
+  const n = parseNotes(`## 7.0.0
+- Android:
+  - chore: **Breaking change** Remove background recording service.
+  - chore: Move to AGP 9.x.
+- iOS:
+  - fix: Respect \`shouldResume\` flag.
+- web:
+  - feat: JS assets are now platform-specific.
+* [#147](https://x/147): fix(ios): raise SPM platform to iOS 13.0.
+* [Android][iOS] added \`openAppNotificationSettings()\` method.
+
+## 7.0.0-rc.1
+- Fix something only in the rc`);
+  eq(kinds(n), {
+    breaking: ['Android: **Breaking change** Remove background recording service.'],
+    feature: ['web: JS assets are now platform-specific.', '[Android][iOS] added `openAppNotificationSettings()` method.'],
+    fix: ['iOS: Respect `shouldResume` flag.', 'Raise SPM platform to iOS 13.0.'],
+    other: ['Android: Move to AGP 9.x.'],
+  });
+});
+test('notes: identifiers and hits in project code', () => {
+  eq(identifiers('remove `EquatableMixin` and `SkeletonizerConfigData.light()` in `String`', 'equatable'),
+    ['EquatableMixin', 'SkeletonizerConfigData', 'light']);
+  eq(identifiers('migrated from `package:flutter/material.dart` to `material_ui`; see ```dart\nclass Foo with Equatable\n```', 'p'),
+    ['material_ui']);
+  const n = parseNotes('## 3.0.0\n- **BREAKING** remove `EquatableMixin`\n- **BREAKING** remove `Other`\n- fix: `props` order');
+  markHits(n, 'equatable', new Set(['EquatableMixin', 'props', 'User']));
+  eq(n.breaking.map((i) => i.hits ?? null), [['EquatableMixin'], null]);
+  eq(n.fix[0].hits, ['props']);
+  const f = parseNotes('## 2.1.0\n- feat: deprecate `EquatableMixin`\n  ```dart\n  class Foo with EquatableMixin {} // OLD\n  ```\n- fix: other');
+  eq(f.feature[0].text, 'Deprecate `EquatableMixin`\n```dart\nclass Foo with EquatableMixin {} // OLD\n```');
+  markHits(f, 'equatable', new Set(['EquatableMixin']));
+  eq(f.feature[0].hits, undefined);
+  eq(f.fix.map((i) => i.text), ['Other']);
+});
+test('classify: parsed notes override the loose "breaking" text match', () => {
+  const prose = '## 1.1.0\n- Fix X, which was breaking any class using it.';
+  eq(classify(base({ changelog: prose })).category, 'breaking'); // old text heuristic
+  eq(classify(base({ changelog: prose, changelogBreaking: false })).category, 'safe');
 });
 
 // ---------- report ----------

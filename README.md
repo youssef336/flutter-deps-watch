@@ -12,7 +12,14 @@
   و `.fvmrc` من الـ repo. لو الـ repo فيه أكتر من مشروع (monorepo) بيسألك تختار أنهي واحد.
 - **بيسأل pub.dev** عن كل باكدج: آخر نسخة وتاريخها، والـ SDK اللي محتاجه، ولو كان
   discontinued، والـ pub points، والثغرات المنشورة (advisories).
-- **بيجيب الـ CHANGELOG** من أرشيف الباكدج نفسه، ويعرض بس اللي اتغيّر من نسختك لآخر نسخة.
+- **بيقولك هتاخد إيه من كل تحديث**: بيجيب الـ CHANGELOG من أرشيف الباكدج نفسه، ياخد بس
+  اللي بين نسختك وآخر نسخة، ويقسمه لـ **بيكسر / اتضاف / اتصلح** (والباقي docs و dependencies
+  في «تاني»). بيفهم أشكال الـ changelog المشهورة: `**FIX**`/`**FEAT**` بتاعة melos، و
+  `fix:`/`feat!:`، و `### Added`/`### Fixed`، و `**Bugs**`، و `Fixed:`، و «Fixes …/Adds …».
+  العدد بيظهر على كل باكدج، وعلى كل مجموعة في الخطة («هتاخد: 12 تصليح · 5 جديد»)، وعلى
+  المشروع كله.
+- **«في كودك»**: لو حاجة بتكسر أو اتصلحت بتذكر API بين `backticks`، الصفحة بتدوّر عليه في
+  الفايلات اللي بتعمل import للباكدج ده عندك، ولو لقته بتعلّم عليه.
 - **بيعدّ الاستخدام**: أنهي فايلات في `lib/` بتعمل import لكل باكدج.
 - **بيصنّف** كل باكدج في واحدة من دول:
 
@@ -55,6 +62,7 @@ bash tool/test.sh                # unit tests in headless Chrome
 | `js/semver.js` | pub-flavoured versions and constraints |
 | `js/pubspec.js` | pubspec / lock / changelog / advisory parsers (keeps comments) |
 | `js/classify.js` | verdict per package + upgrade plan |
+| `js/notes.js` | changelog → breaking / feature / fix / other, and "used in your code" hits |
 | `js/github.js`, `js/pub.js` | GitHub, pub.dev and Flutter-release lookups (all CORS-enabled) |
 | `js/scan.js` | one scan, end to end |
 | `js/main.js`, `js/labels.js`, `js/md.js` | page, strings, safe markdown for changelogs |

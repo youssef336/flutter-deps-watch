@@ -1,6 +1,7 @@
 // Orchestrates one scan: repo → pubspec/lock → pub.dev facts → verdicts → plan.
 
 import { classify, families, plan, CATEGORIES } from './classify.js';
+import { markHits, parseNotes } from './notes.js';
 import { advisoryAffects, changelogSlice, parseEnvironment, parseLock, parseName, parsePubspec } from './pubspec.js';
 import { flutterReleases, packageAdvisories, packageChangelog, packageInfo, packageScore, pool } from './pub.js';
 import { Constraint, Version } from './semver.js';
@@ -115,6 +116,7 @@ async function facts(dep, lockEntry, { dart, flutter, now }) {
   if (hasUpdate && info.latest.archive_url) {
     changelog = changelogSlice(await packageChangelog(info.latest.archive_url).catch(() => ''), current, latest);
   }
+  const notes = changelog ? parseNotes(changelog) : null;
   const sdkOk = !dart || !Constraint.parse(spec.environment?.sdk) || Constraint.parse(spec.environment.sdk).allows(dart);
   const flutterOk = !flutter || !Constraint.parse(spec.environment?.flutter) ||
     Constraint.parse(spec.environment.flutter).allows(flutter);
@@ -124,6 +126,7 @@ async function facts(dep, lockEntry, { dart, flutter, now }) {
 
   Object.assign(row, classify({
     dep, now, current, latest, latestPublished: published, changelog,
+    changelogBreaking: notes ? notes.breaking.length > 0 : undefined,
     advisories: affecting.length, native, sdkCompatible: sdkOk && flutterOk,
     discontinued: !!info.isDiscontinued,
   }), {
@@ -137,6 +140,7 @@ async function facts(dep, lockEntry, { dart, flutter, now }) {
     requires: { sdk: spec.environment?.sdk ?? null, flutter: spec.environment?.flutter ?? null },
     repository: spec.repository || spec.homepage || null,
     changelog,
+    notes,
     advisories: affecting.map((a) => ({
       id: a.id,
       summary: a.summary || '',
@@ -168,15 +172,23 @@ async function usage(o, rows, onProgress) {
   const limit = 3000;
   const picked = files.slice(0, limit);
   const byPkg = {};
+  const words = {}; // identifiers in the files importing each package
   let done = 0;
   await pool(picked, 12, async (path) => {
     const text = await o.gh.file(o.owner, o.repo, o.ref, path).catch(() => null);
-    for (const m of (text || '').matchAll(/['"]package:([a-z0-9_]+)\//g)) {
-      const set = (byPkg[m[1]] ||= new Set());
-      set.add(path.slice(prefix.length));
+    const imported = new Set([...(text || '').matchAll(/['"]package:([a-z0-9_]+)\//g)].map((m) => m[1]));
+    if (!imported.size) return onProgress('usage', ++done, picked.length);
+    const ids = new Set((text.match(/[A-Za-z_$][\w$]{2,}/g)) || []);
+    for (const pkg of imported) {
+      (byPkg[pkg] ||= new Set()).add(path.slice(prefix.length));
+      const set = (words[pkg] ||= new Set());
+      for (const id of ids) set.add(id);
     }
     onProgress('usage', ++done, picked.length);
   });
-  for (const r of rows) r.usage = [...(byPkg[r.name] || [])].sort();
+  for (const r of rows) {
+    r.usage = [...(byPkg[r.name] || [])].sort();
+    markHits(r.notes, r.name, words[r.name]);
+  }
   rows.usageTruncated = files.length > limit;
 }

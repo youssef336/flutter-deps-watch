@@ -204,6 +204,33 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
 
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 10px; font-size: 14px; z-index: 10; }
 
+/* What an upgrade brings */
+.ncs { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-inline-end: 8px; vertical-align: middle; }
+.nc { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 0 7px; line-height: 20px; background: color-mix(in srgb, var(--k) 14%, transparent); color: var(--k); }
+.nc-breaking { --k: var(--breaking); }
+.nc-feature { --k: var(--locked); }
+.nc-fix { --k: var(--safe); }
+.nc-hit { --k: var(--security); }
+.gain { margin: 0 0 8px; font-size: 14px; }
+.gain.total { margin-top: 12px; }
+.notes { display: grid; gap: 10px; }
+.nl { border: 1px solid var(--line); border-inline-start: 3px solid var(--k); border-radius: 8px; padding: 8px 12px; }
+.nl-breaking { --k: var(--breaking); }
+.nl-feature { --k: var(--locked); }
+.nl-fix { --k: var(--safe); }
+.nl-title { font-weight: 800; font-size: 14px; color: var(--k); }
+.nl-title span { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.notes ul { list-style: none; margin: 4px 0 0; padding: 0; direction: ltr; text-align: left; display: grid; gap: 6px; }
+.notes li { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; font-size: 13.5px; align-items: baseline; }
+.notes li .nt { min-width: 0; overflow-wrap: anywhere; }
+.notes li .nt p { margin: 0; }
+.notes li .nt ul { margin: 2px 0 0 12px; list-style: disc; display: block; }
+.nv { font: 600 11px 'JetBrains Mono', monospace; color: var(--muted); background: var(--sunken); border-radius: 4px; padding: 0 5px; }
+.notes li:not(:has(.nv)) { grid-template-columns: 1fr; }
+.hit { grid-column: 2; font-size: 12px; font-weight: 700; color: var(--security); direction: rtl; text-align: right; }
+details.sub > summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
+details.sub[open] > summary { margin-bottom: 6px; }
+
 @media (max-width: 760px) {
   .strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .filter { width: 100%; }

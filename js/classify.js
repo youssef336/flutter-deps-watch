@@ -23,7 +23,7 @@ export function lockReasons(dep) {
 
 /**
  * @param f {{dep, now: Date, current?: Version, latest?: Version, latestPublished?: Date,
- *   changelog?: string, advisories?: number, native?: boolean|null, sdkCompatible?: boolean,
+ *   changelog?: string, changelogBreaking?: boolean, advisories?: number, native?: boolean|null, sdkCompatible?: boolean,
  *   discontinued?: boolean}}
  * @returns {{category: string, reasons: string[], locked: boolean, ota: boolean|null}}
  */
@@ -45,7 +45,7 @@ export function classify(f) {
   const constraint = Constraint.parse(f.dep.constraint);
   const breaking = [
     ...(current.isBreakingTo(latest) ? ['major-bump'] : []),
-    ...(BREAKING_TEXT.test(changelog) ? ['changelog-breaking'] : []),
+    ...((f.changelogBreaking ?? BREAKING_TEXT.test(changelog)) ? ['changelog-breaking'] : []),
     ...(f.sdkCompatible === false ? ['needs-newer-sdk'] : []),
     ...(constraint && !constraint.allows(latest) && !Version.parse(f.dep.constraint) ? ['outside-constraint'] : []),
   ];

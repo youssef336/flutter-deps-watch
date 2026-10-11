@@ -5,6 +5,7 @@ import { CATEGORIES, upgradeCommand } from './classify.js';
 import { GitHub, GitHubError, parseRepoInput } from './github.js';
 import { BATCH, CATEGORY, ERROR, REASON, SECTION, STAGE, TOOLCHAIN_SOURCE } from './labels.js';
 import { esc, markdown } from './md.js';
+import { noteCounts } from './notes.js';
 import { flutterReleases } from './pub.js';
 import { pubspecDirs, scan } from './scan.js';
 
@@ -175,6 +176,7 @@ function render() {
   $('hero').hidden = true;
   renderProject(r);
   renderStrip(r);
+  renderGain(r);
   renderSecurity(r);
   renderPlan(r);
   renderLedger();
@@ -222,6 +224,13 @@ function renderStrip(r) {
   };
 }
 
+function renderGain(r) {
+  const rows = r.batches.flatMap((b) => b.rows);
+  const chips = noteChips(sumNotes(rows));
+  $('gain').hidden = !chips;
+  $('gain').innerHTML = chips ? `لو حدّثت ${rows.length} باكدج اللي في الخطة، هتاخد: ${chips}` : '';
+}
+
 function renderSecurity(r) {
   const hits = r.rows.filter((p) => p.advisories?.length);
   $('security').innerHTML = !hits.length ? '' : `
@@ -246,6 +255,7 @@ function renderPlan(r) {
           <span class="badge ${b.store ? 'store' : 'ota'}">${b.store ? 'store release' : 'Dart بس · OTA'}</span>
         </h3>
         <p class="muted">${esc(BATCH[b.id].why)}</p>
+        ${noteChips(sumNotes(b.rows)) ? `<p class="gain">هتاخد: ${noteChips(sumNotes(b.rows))}</p>` : ''}
         <div class="pkgs">${b.rows.map((p) => `<span class="pkg-chip" title="${esc(CATEGORY[p.category].label)}">${esc(p.name)} ${esc(p.current)} → ${esc(p.latest)}</span>`).join('')}</div>
         <div class="cmd"><code>${esc(b.command)}</code><button type="button" class="btn sm" data-copy="${esc(b.command)}">انسخ</button></div>
       </div>
@@ -272,6 +282,47 @@ function renderLedger() {
 const date = (iso) => (iso ? new Date(iso).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : '—');
 const num = (n) => (n == null ? '—' : Intl.NumberFormat('en', { notation: 'compact' }).format(n));
 
+const NOTE_KIND = {
+  breaking: { title: 'بيكسر', one: 'بيكسر' },
+  feature: { title: 'اتضاف', one: 'جديد' },
+  fix: { title: 'اتصلح', one: 'تصليح' },
+};
+
+/** Sums what a set of upgrades brings, e.g. for a batch or the whole project. */
+function sumNotes(rows) {
+  const t = { breaking: 0, feature: 0, fix: 0, hits: 0 };
+  for (const p of rows) {
+    const c = noteCounts(p.notes);
+    t.breaking += c.breaking; t.feature += c.feature; t.fix += c.fix;
+    t.hits += p.notes?.breaking.filter((it) => it.hits).length ?? 0;
+  }
+  return t;
+}
+
+/** "3 بيكسر · 5 جديد · 12 تصليح" as coloured counters; '' when nothing was parsed. */
+function noteChips(t) {
+  const parts = ['breaking', 'feature', 'fix'].filter((k) => t[k])
+    .map((k) => `<span class="nc nc-${k}">${t[k]} ${NOTE_KIND[k].one}</span>`);
+  if (t.hits) parts.unshift(`<span class="nc nc-hit">${t.hits} بيلمس كودك</span>`);
+  return parts.length ? `<span class="ncs">${parts.join('')}</span>` : '';
+}
+
+function noteItem(it) {
+  return `<li>${it.version ? `<span class="nv">${esc(it.version)}</span>` : ''}<div class="nt">${markdown(it.text)}</div>${
+    it.hits ? `<div class="hit">في كودك: ${it.hits.map((h) => `<code>${esc(h)}</code>`).join(' ')}</div>` : ''}</li>`;
+}
+
+function notesBlock(p) {
+  const n = p.notes;
+  const lists = ['breaking', 'feature', 'fix'].filter((k) => n?.[k].length).map((k) => `
+    <div class="nl nl-${k}"><div class="nl-title">${NOTE_KIND[k].title} <span>${n[k].length}</span></div>
+      <ul>${n[k].map(noteItem).join('')}</ul></div>`).join('');
+  const other = n?.other.length ? `<details class="sub"><summary>تاني (${n.other.length}) — docs و dependencies و refactor</summary>
+      <ul class="plain">${n.other.map(noteItem).join('')}</ul></details>` : '';
+  const raw = `<details class="sub"><summary>الـ changelog زي ما هو</summary><div class="changelog">${markdown(p.changelog)}</div></details>`;
+  return `<div class="notes">${lists || '<p class="muted small">مفيش حاجة واضحة إنها تصليح أو جديد — اقرا الـ changelog.</p>'}${other}${raw}</div>`;
+}
+
 function pkgCard(p) {
   const r = state.report;
   const update = p.latest && p.current !== p.latest;
@@ -291,7 +342,7 @@ function pkgCard(p) {
         <span class="badge cat">${esc(CATEGORY[p.category].label)}</span>${otaBadge}
         ${p.section !== 'main' ? `<span class="badge neutral">${esc(p.section === 'dev' ? 'dev' : 'override')}</span>` : ''}
       </div>
-      ${p.reasons.length || usage ? `<div class="pkg-sub">${p.reasons.map((x) => esc(REASON[x] || x)).join(' · ')}${p.reasons.length && usage ? ' · ' : ''}${usage}</div>` : ''}
+      ${p.reasons.length || usage || p.notes ? `<div class="pkg-sub">${noteChips(sumNotes([p]))}${p.reasons.map((x) => esc(REASON[x] || x)).join(' · ')}${p.reasons.length && usage ? ' · ' : ''}${usage}</div>` : ''}
     </summary>
     <div class="pkg-body">
       ${p.note ? `<div class="block-title">التعليق اللي فوقه في pubspec</div><div class="note">${esc(p.note)}</div>` : ''}
@@ -306,7 +357,7 @@ function pkgCard(p) {
       </dl>
       ${p.advisories?.length ? `<div class="block-title">ثغرات</div><ul>${p.advisories.map((a) => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.id)}</a> <span dir="ltr">${esc(a.summary)}</span>${a.fixed ? ` — اتصلحت في ${esc(a.fixed)}` : ''}</li>`).join('')}</ul>` : ''}
       ${command ? `<div class="block-title">أمر التحديث</div><div class="cmd"><code>${esc(command)}</code><button type="button" class="btn sm" data-copy="${esc(command)}">انسخ</button></div>` : ''}
-      ${update ? `<div class="block-title">الجديد من ${esc(p.current)} لـ ${esc(p.latest)}</div>${p.changelog ? `<div class="changelog">${markdown(p.changelog)}</div>` : '<p class="muted small">الباكدج مفيهوش CHANGELOG.md بنسخ واضحة — شوفه على pub.dev.</p>'}` : ''}
+      ${update ? `<div class="block-title">هتاخد إيه من ${esc(p.current)} لـ ${esc(p.latest)}</div>${p.changelog ? notesBlock(p) : '<p class="muted small">الباكدج مفيهوش CHANGELOG.md بنسخ واضحة — شوفه على pub.dev.</p>'}` : ''}
       ${p.usage?.length ? `<div class="block-title">مستخدم في</div><ul class="files">${p.usage.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
       <div class="links">
         ${p.onPub ? `<a href="${pubUrl}" target="_blank" rel="noopener">pub.dev</a><a href="${pubUrl}/changelog" target="_blank" rel="noopener">الـ changelog كله</a>` : ''}
@@ -337,6 +388,27 @@ function toMarkdown(r) {
       lines.push(`   \`${b.command}\``);
     });
     lines.push('');
+  }
+  const upgrades = r.batches.flatMap((b) => b.rows).filter((p) => p.notes);
+  if (upgrades.length) {
+    lines.push('### What the upgrades bring', '');
+    const cap = 10;
+    for (const p of upgrades) {
+      const c = noteCounts(p.notes);
+      lines.push(`<details><summary><code>${p.name}</code> ${p.current} → ${p.latest} — ${c.breaking} breaking · ${c.feature} new · ${c.fix} fixes</summary>`, '');
+      for (const [kind, title] of [['breaking', 'Breaking'], ['feature', 'New'], ['fix', 'Fixed']]) {
+        const items = p.notes[kind];
+        if (!items.length) continue;
+        lines.push(`**${title}**`, '');
+        for (const it of items.slice(0, cap)) {
+          const hit = it.hits ? ` — ⚠️ used in this repo: ${it.hits.map((h) => `\`${h}\``).join(', ')}` : '';
+          lines.push(`- ${it.version ? `\`${it.version}\` ` : ''}${it.text.split('\n')[0]}${hit}`);
+        }
+        if (items.length > cap) lines.push(`- …and ${items.length - cap} more`);
+        lines.push('');
+      }
+      lines.push('</details>', '');
+    }
   }
   const flagged = r.rows.filter((p) => p.category !== 'upToDate');
   if (flagged.length) {
