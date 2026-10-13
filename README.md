@@ -13,6 +13,11 @@
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT">
 </p>
 
+<p align="center">
+  <img src="docs/screens.jpg" alt="Screens" width="100%"/>
+  <br/><sub>Live site: scan of a real Flutter repo</sub>
+</p>
+
 > **English summary.** Flutter Deps Watch is a zero-backend, zero-build web tool (Arabic UI). Give it a
 > GitHub repo link and it reads `pubspec.yaml`, `pubspec.lock` and the pinned Flutter version, asks
 > pub.dev about every dependency (latest version, SDK requirement, discontinued status, pub points,
